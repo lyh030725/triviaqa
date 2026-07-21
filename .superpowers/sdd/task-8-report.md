@@ -59,3 +59,39 @@ so the task brief's `git apply --recount` fallback was used for source/report ch
 - `uv run ruff check .` — all checks passed.
 - `uv run pytest -v` — 137 passed.
 - `git diff --check` — passed before report creation; rerun at commit gate.
+
+## Fix Report — resume identity and fatal validation review
+
+### Root cause
+
+- `is_complete` treated every hash/WAV validation exception as an incomplete
+  candidate, so fatal EIO and ENOSPC errors were swallowed and synthesis could start.
+- The strict identity tuple stopped at seed/generation. Although success metadata
+  contained dtype and attention values, resume did not require their presence or
+  compare them, and dtype was derived from the backend object rather than the
+  configured dtype string.
+- Success metadata recorded the resolved safe audio path, but resume never compared
+  that field to the canonical output path for the current record.
+
+### Resolution
+
+- Reused the exception-chain fatal OS classifier at the `is_complete` boundary:
+  EIO/ENOSPC now propagate, while ordinary malformed or corrupt audio remains
+  incomplete and is regenerated.
+- Added configured `dtype` and backend-resolved `attention_implementation` to the
+  required identity fields, retaining Task 7's explicit-presence and exact-JSON-type
+  comparison.
+- Required `audio_path` to be a string exactly equal to the canonical resolved WAV
+  path used by synthesis. Missing, stale, relative, or tampered values regenerate.
+
+### TDD and verification
+
+- RED: `uv run pytest tests/test_resume.py tests/test_smoke.py -q` — 11 expected
+  failures for swallowed fatal errors, ignored identity/path changes, missing required
+  fields, and backend-derived dtype metadata.
+- GREEN: the same focused suite — 58 passed.
+- `uv run pytest tests/test_smoke.py tests/test_resume.py tests/test_audio_validation.py -q`
+  — 88 passed.
+- `uv run ruff check .` — all checks passed.
+- `uv run pytest -q` — 147 passed.
+- `git diff --check` — passed before this report append; rerun at commit gate.

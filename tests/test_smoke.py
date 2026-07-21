@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import errno
 import hashlib
 from dataclasses import asdict, replace
 from pathlib import Path
 
 import soundfile as sf
+import pytest
 
 from triviaqa_tts.config import AppConfig
 from triviaqa_tts.data.manifest import iter_jsonl, safe_audio_stem, sha256_file
@@ -58,7 +60,7 @@ def test_mock_pipeline_writes_complete_metadata_and_resume_is_idempotent(
         assert item["speaker"] == "Aiden"
         assert item["language"] == "English"
         assert item["seed"] == 42
-        assert item["dtype"] == "float32"
+        assert item["dtype"] == synthesis_config.tts.dtype
         assert item["attention_implementation"] == "mock"
         assert item["generation"] == {}
         assert item["environment"]["python_version"]
@@ -90,6 +92,73 @@ def test_mock_pipeline_writes_complete_metadata_and_resume_is_idempotent(
     )
     assert second_backend.calls == []
     assert metadata_path.read_bytes() == before
+
+
+def test_resume_regenerates_when_resolved_attention_changes(
+    synthesis_config: AppConfig,
+) -> None:
+    synthesize_manifest(synthesis_config, lambda config: MockBackend())
+
+    backend = MockBackend()
+    backend.attention_implementation = "different-resolved-attention"
+    resume_config = replace(
+        synthesis_config,
+        selection=replace(synthesis_config.selection, resume=True),
+    )
+
+    summary = synthesize_manifest(resume_config, lambda config: backend)
+
+    assert summary.processed == 2
+    assert summary.skipped == 0
+    assert len(backend.calls) == 2
+
+
+def test_resume_regenerates_when_configured_dtype_changes(
+    synthesis_config: AppConfig,
+) -> None:
+    synthesize_manifest(synthesis_config, lambda config: MockBackend())
+
+    backend = MockBackend()
+    resume_config = replace(
+        synthesis_config,
+        selection=replace(synthesis_config.selection, resume=True),
+        tts=replace(synthesis_config.tts, dtype="float16"),
+    )
+
+    summary = synthesize_manifest(resume_config, lambda config: backend)
+
+    assert summary.processed == 2
+    assert summary.skipped == 0
+    assert len(backend.calls) == 2
+
+
+@pytest.mark.parametrize(
+    ("validator_name", "fatal_errno"),
+    [("sha256_file", errno.EIO), ("validate_wav", errno.ENOSPC)],
+)
+def test_resume_aborts_on_fatal_os_error_before_backend_generation(
+    synthesis_config: AppConfig,
+    monkeypatch: pytest.MonkeyPatch,
+    validator_name: str,
+    fatal_errno: int,
+) -> None:
+    synthesize_manifest(synthesis_config, lambda config: MockBackend())
+    backend = MockBackend()
+    resume_config = replace(
+        synthesis_config,
+        selection=replace(synthesis_config.selection, resume=True),
+    )
+
+    def raise_fatal(*args, **kwargs):
+        raise OSError(fatal_errno, "fatal resume validation")
+
+    monkeypatch.setattr(f"triviaqa_tts.tts.synthesize.{validator_name}", raise_fatal)
+
+    with pytest.raises(OSError) as raised:
+        synthesize_manifest(resume_config, lambda config: backend)
+
+    assert raised.value.errno == fatal_errno
+    assert backend.calls == []
 
 
 def test_sample_failure_is_appended_and_next_sample_succeeds(

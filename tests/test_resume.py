@@ -32,6 +32,8 @@ def resume_case(tmp_path: Path):
         "speaker": "Aiden",
         "language": "English",
         "seed": 42,
+        "dtype": "bfloat16",
+        "attention_implementation": "sdpa",
         "generation": {},
     }
     question_sha256 = hashlib.sha256(
@@ -40,6 +42,7 @@ def resume_case(tmp_path: Path):
     metadata = {
         "question_id": record["question_id"],
         "status": "success",
+        "audio_path": str(wav_path.resolve()),
         "audio_sha256": sha256_file(wav_path),
         "question_sha256": question_sha256,
         **expected,
@@ -69,6 +72,9 @@ def test_complete_accepts_only_matching_success_or_warning(resume_case, status):
         ("speaker", "Ryan"),
         ("language", "Chinese"),
         ("seed", 43),
+        ("dtype", "float16"),
+        ("attention_implementation", "flash_attention_2"),
+        ("audio_path", "/stale/audio/q-1.wav"),
         ("generation", {"temperature": 0.7}),
         ("sample_rate", 16_000),
         ("channels", 2),
@@ -118,6 +124,9 @@ def test_complete_rejects_wrong_question_identity(resume_case):
         "speaker",
         "language",
         "seed",
+        "dtype",
+        "attention_implementation",
+        "audio_path",
         "generation",
         "sample_rate",
         "channels",

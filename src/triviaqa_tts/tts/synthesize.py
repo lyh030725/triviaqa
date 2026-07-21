@@ -32,6 +32,8 @@ _EXPECTED_TTS_FIELDS = (
     "speaker",
     "language",
     "seed",
+    "dtype",
+    "attention_implementation",
     "generation",
 )
 _MANIFEST_STRING_FIELDS = (
@@ -239,7 +241,9 @@ def is_complete(
     """Return whether a WAV and its latest metadata satisfy every resume invariant."""
     try:
         return _is_complete(record, metadata, wav_path, expected, audio_config)
-    except Exception:
+    except Exception as error:
+        if _contains_fatal_os_error(error):
+            raise
         return False
 
 
@@ -251,7 +255,7 @@ def _is_complete(
     audio_config: AppConfig | AudioConfig,
 ) -> bool:
     """Compare resume metadata and its WAV, failing closed for malformed values."""
-    path = Path(wav_path)
+    path = Path(wav_path).resolve()
     if (
         not isinstance(record, Mapping)
         or not isinstance(metadata, Mapping)
@@ -303,6 +307,10 @@ def _is_complete(
     ):
         return False
 
+    if "audio_path" not in metadata or not _json_values_equal(
+        metadata["audio_path"], str(path)
+    ):
+        return False
     if not path.is_file() or "audio_sha256" not in metadata:
         return False
     if not _json_values_equal(metadata["audio_sha256"], sha256_file(path)):
@@ -374,20 +382,17 @@ def _expected_tts_metadata(config: AppConfig, backend: TTSBackend) -> dict[str, 
     revision = getattr(backend, "model_revision", config.tts.model_revision)
     if revision is not None and not isinstance(revision, str):
         raise TypeError("backend model revision must be a string or None")
-    attention = getattr(backend, "attention_implementation", config.tts.attention)
-    dtype = getattr(backend, "dtype", config.tts.dtype)
+    attention = getattr(backend, "attention_implementation", None)
+    if not isinstance(attention, str) or not attention:
+        raise TypeError("backend.attention_implementation must be a non-empty string")
     return {
         "model_id": model_id,
         "model_revision": revision,
         "speaker": config.tts.speaker,
         "language": config.tts.language,
         "seed": config.tts.seed,
-        "dtype": dtype if isinstance(dtype, (str, int, float, bool)) else str(dtype),
-        "attention_implementation": (
-            attention
-            if isinstance(attention, (str, int, float, bool)) or attention is None
-            else str(attention)
-        ),
+        "dtype": config.tts.dtype,
+        "attention_implementation": attention,
         "generation": config.tts.generation,
     }
 

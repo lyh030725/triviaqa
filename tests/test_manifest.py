@@ -43,8 +43,20 @@ def test_example_to_record_preserves_answer_lists():
     }
 
 
-def test_normalize_question_is_minimal():
-    assert normalize_question("  Who  &amp; why ") == "Who & why?"
+def test_normalize_question_strongly_cleans_tts_text():
+    assert normalize_question('  "Which city (formerly Bombay) hosts [the event]?"  ') == (
+        "Which city hosts?"
+    )
+    assert normalize_question("Who&nbsp;wrote <i>Hamlet</i> & why??") == (
+        "Who wrote Hamlet and why?"
+    )
+    assert normalize_question('According to Kipling, what were the ""two imposters""?') == (
+        "According to Kipling, what were the two imposters?"
+    )
+    assert normalize_question("Who wrote 'Hamlet' and O'Neill's plays?") == "Who wrote Hamlet and O'Neill's plays?"
+    assert normalize_question("Which term {obsolete (regional)} / expression applies?") == (
+        "Which term expression applies?"
+    )
     assert normalize_question("Already complete!") == "Already complete!"
 
 

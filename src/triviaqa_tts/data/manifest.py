@@ -6,6 +6,7 @@ import hashlib
 import html
 import json
 import re
+import unicodedata
 import warnings
 from collections.abc import Iterable, Iterator, Mapping
 from pathlib import Path
@@ -14,6 +15,10 @@ _DEFAULT_DATASET = "mandarjoshi/trivia_qa"
 _DEFAULT_CONFIGURATION = "unfiltered.nocontext"
 _DEFAULT_SPLIT = "validation"
 _SAFE_STEM_COMPONENT = re.compile(r"[^A-Za-z0-9._-]+")
+_HTML_TAG = re.compile(r"<[^>]*>")
+_BRACKETED_TEXT = re.compile(r"\([^()]*\)|\[[^\[\]]*\]|\{[^{}]*\}")
+_DOUBLE_QUOTES = str.maketrans("“”„‟«»\"", "       ")
+_DASHES = str.maketrans("–—―", "---")
 
 
 class ManifestFormatError(ValueError):
@@ -96,8 +101,24 @@ def _is_truncated_json_object(error: json.JSONDecodeError) -> bool:
 
 
 def normalize_question(text: str) -> str:
-    """Apply the minimal normalization used before speech synthesis."""
-    normalized = " ".join(html.unescape(text).split())
+    """Strongly normalize a TriviaQA question for unambiguous speech synthesis."""
+    normalized = unicodedata.normalize("NFKC", html.unescape(text))
+    normalized = _HTML_TAG.sub(" ", normalized)
+    while _BRACKETED_TEXT.search(normalized):
+        normalized = _BRACKETED_TEXT.sub(" ", normalized)
+    normalized = normalized.translate(_DOUBLE_QUOTES)
+    normalized = normalized.translate(_DASHES)
+    normalized = normalized.replace("’", "'").replace("`", "'")
+    normalized = re.sub(r"(?<!\w)'|'(?!\w)", " ", normalized)
+    normalized = normalized.replace("&", " and ")
+    normalized = re.sub(r"[/\\|]+", " ", normalized)
+    normalized = re.sub(r"[()\[\]{}]", " ", normalized)
+    normalized = re.sub(r"\?+", "?", normalized)
+    normalized = re.sub(r"!+", "!", normalized)
+    normalized = re.sub(r"\.{2,}", ".", normalized)
+    normalized = re.sub(r",{2,}", ",", normalized)
+    normalized = " ".join(normalized.split())
+    normalized = re.sub(r"\s+([,.;:!?])", r"\1", normalized).strip(" ,;:-")
     if normalized and normalized[-1] not in ".!?;:":
         return f"{normalized}?"
     return normalized

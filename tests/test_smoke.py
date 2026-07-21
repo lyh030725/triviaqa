@@ -26,7 +26,7 @@ def test_mock_pipeline_writes_complete_metadata_and_resume_is_idempotent(
     assert summary == SynthesisSummary(
         selected=2, processed=2, skipped=0, success=2, warning=0, failure=0
     )
-    assert backend.calls == [("Who & why?", 42), ("Already complete!", 42)]
+    assert backend.calls == [("Who and why?", 42), ("Already complete!", 42)]
     metadata_path = synthesis_config.paths.logs_dir / "metadata.jsonl"
     metadata = list(iter_jsonl(metadata_path, allow_partial_last_line=False))
     assert len(metadata) == 2
@@ -166,7 +166,7 @@ def test_sample_failure_is_appended_and_next_sample_succeeds(
 ) -> None:
     class FailFirstBackend(MockBackend):
         def synthesize(self, text: str, seed: int):
-            if text == "Who & why?":
+            if text == "Who and why?":
                 self.calls.append((text, seed))
                 raise RuntimeError("intentional sample failure")
             return super().synthesize(text, seed)
@@ -186,7 +186,7 @@ def test_sample_failure_is_appended_and_next_sample_succeeds(
     )
     assert len(failures) == 1
     assert failures[0]["question_id"] == "safe/../one"
-    assert failures[0]["tts_text"] == "Who & why?"
+    assert failures[0]["tts_text"] == "Who and why?"
     assert failures[0]["error_type"] == "RuntimeError"
     assert failures[0]["error_message"] == "intentional sample failure"
     assert failures[0]["status"] == "failure"
@@ -209,7 +209,7 @@ def test_cuda_oom_clears_cache_and_retries_once(synthesis_config: AppConfig, mon
         def synthesize(self, text: str, seed: int):
             self.calls.append((text, seed))
             self.attempts[text] = self.attempts.get(text, 0) + 1
-            if text == "Who & why?":
+            if text == "Who and why?":
                 raise RuntimeError("CUDA out of memory")
             return MockBackend.synthesize(self, text, seed)
 
@@ -223,7 +223,7 @@ def test_cuda_oom_clears_cache_and_retries_once(synthesis_config: AppConfig, mon
 
     assert summary.failure == 1
     assert summary.success == 1
-    assert backend.attempts["Who & why?"] == 2
+    assert backend.attempts["Who and why?"] == 2
     assert len(cleared) == 1
 
 

@@ -482,7 +482,7 @@ Expected: shell syntax and tests PASS; no dataset/model download occurs.
 
 - [ ] **Step 5: Generate and verify lockfile**
 
-Run: `uv lock && uv sync --extra dev && uv run python -c "import numpy, soundfile, yaml; print('runtime imports ok')"`
+Run: `uv lock && uv sync --group dev && uv run python -c "import numpy, soundfile, yaml; print('runtime imports ok')"`
 
 Expected: lock succeeds and prints `runtime imports ok`.
 

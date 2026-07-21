@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import re
+import tomllib
 from pathlib import Path
 
 import yaml
@@ -104,6 +105,50 @@ def test_shell_scripts_are_executable_fail_fast_wrappers() -> None:
         assert f'"${{REPO_ROOT}}/.venv/bin/python" -m {module}' in text
 
 
+def test_tts_extra_pins_the_approved_pytorch_cuda_stack() -> None:
+    metadata = tomllib.loads((REPOSITORY_ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+
+    assert metadata["project"]["optional-dependencies"]["tts"] == [
+        "qwen-tts==0.1.1",
+        "torch==2.11.0",
+        "torchaudio==2.11.0",
+    ]
+    assert metadata["tool"]["uv"]["index"] == [
+        {
+            "name": "pytorch-cu128",
+            "url": "https://download.pytorch.org/whl/cu128",
+            "explicit": True,
+        }
+    ]
+    assert metadata["tool"]["uv"]["sources"] == {
+        "torch": {"index": "pytorch-cu128"},
+        "torchaudio": {"index": "pytorch-cu128"},
+    }
+
+
+def test_lockfile_resolves_only_the_approved_cuda_12_8_stack() -> None:
+    lock_text = (REPOSITORY_ROOT / "uv.lock").read_text(encoding="utf-8")
+    lock = tomllib.loads(lock_text)
+    packages = {package["name"]: package for package in lock["package"]}
+
+    expected_source = {"registry": "https://download.pytorch.org/whl/cu128"}
+    assert packages["torch"]["version"] == "2.11.0+cu128"
+    assert packages["torch"]["source"] == expected_source
+    assert packages["torchaudio"]["version"] == "2.11.0+cu128"
+    assert packages["torchaudio"]["source"] == expected_source
+    assert packages["cuda-toolkit"]["version"].startswith("12.8.")
+
+    package_names = set(packages)
+    assert {
+        "nvidia-cublas-cu12",
+        "nvidia-cuda-runtime-cu12",
+        "nvidia-cudnn-cu12",
+        "nvidia-cusparse-cu12",
+    } <= package_names
+    assert not {name for name in package_names if "cu13" in name}
+    assert "/whl/cu13" not in lock_text
+
+
 def test_bootstrap_covers_runpod_prerequisites_and_sdpa_fallback() -> None:
     text = (SCRIPT_DIRECTORY / "bootstrap_runpod.sh").read_text(encoding="utf-8")
 
@@ -123,7 +168,15 @@ def test_bootstrap_covers_runpod_prerequisites_and_sdpa_fallback() -> None:
         "torch.cuda.is_available()",
         "torch.cuda.is_bf16_supported()",
         "torch.cuda.get_device_name(0)",
-        "CUDA 12.0 or newer is required",
+        "import torchaudio",
+        'EXPECTED_TORCH_VERSION = "2.11.0"',
+        'EXPECTED_TORCHAUDIO_VERSION = "2.11.0"',
+        'EXPECTED_CUDA_VERSION_PREFIX = "12.8"',
+        "PyTorch 2.11.0 is required",
+        "TorchAudio 2.11.0 is required",
+        "PyTorch CUDA 12.8 runtime is required",
+        "torch.__version__",
+        "torchaudio.__version__",
         "MAX_JOBS=4",
         "flash-attn",
         "SDPA",

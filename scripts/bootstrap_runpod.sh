@@ -80,26 +80,49 @@ from __future__ import annotations
 import importlib.metadata
 import platform
 
-import torch
+EXPECTED_TORCH_VERSION = "2.11.0"
+EXPECTED_TORCHAUDIO_VERSION = "2.11.0"
+EXPECTED_CUDA_VERSION_PREFIX = "12.8"
+
+try:
+    import torch
+    import torchaudio
+except (ImportError, OSError) as error:
+    raise SystemExit(f"PyTorch/TorchAudio import failed: {error}") from error
 
 
 if platform.python_version_tuple()[:2] != ("3", "12"):
     raise SystemExit(f"Python 3.12 is required, found {platform.python_version()}")
+torch_version = torch.__version__.split("+", 1)[0]
+if torch_version != EXPECTED_TORCH_VERSION:
+    raise SystemExit(
+        f"PyTorch 2.11.0 is required, found {torch.__version__}; rerun locked bootstrap"
+    )
+torchaudio_version = torchaudio.__version__.split("+", 1)[0]
+if torchaudio_version != EXPECTED_TORCHAUDIO_VERSION:
+    raise SystemExit(
+        f"TorchAudio 2.11.0 is required, found {torchaudio.__version__}; rerun locked bootstrap"
+    )
 if not torch.cuda.is_available():
-    raise SystemExit("CUDA is unavailable; select a CUDA-enabled RunPod image")
+    raise SystemExit(
+        "CUDA is unavailable in PyTorch; select a CUDA-enabled RunPod GPU image with a "
+        "CUDA 12.8-compatible NVIDIA driver"
+    )
 cuda_version = torch.version.cuda
-cuda_version_tuple = tuple(int(part) for part in cuda_version.split(".")[:2]) if cuda_version else ()
-if cuda_version_tuple < (12, 0):
-    raise SystemExit(f"CUDA 12.0 or newer is required, found {cuda_version!r}")
-torch_version = tuple(int(part) for part in torch.__version__.split("+", 1)[0].split(".")[:2])
-if torch_version < (2, 2):
-    raise SystemExit(f"PyTorch 2.2 or newer is required, found {torch.__version__}")
+if not cuda_version or not cuda_version.startswith(EXPECTED_CUDA_VERSION_PREFIX):
+    raise SystemExit(
+        f"PyTorch CUDA 12.8 runtime is required, found torch.version.cuda={cuda_version!r}; "
+        "verify the cu128 uv index and regenerate the environment"
+    )
 if not torch.cuda.is_bf16_supported():
-    raise SystemExit("The selected GPU does not support the configured bfloat16 dtype")
+    raise SystemExit(
+        f"GPU {torch.cuda.get_device_name(0)!r} does not support the configured bfloat16 dtype"
+    )
 
 print(f"Python: {platform.python_version()}")
 print(f"GPU: {torch.cuda.get_device_name(0)}")
 print(f"PyTorch: {torch.__version__}")
+print(f"TorchAudio: {torchaudio.__version__}")
 print(f"CUDA runtime: {cuda_version}")
 for distribution in ("qwen-tts", "transformers", "soundfile"):
     print(f"{distribution}: {importlib.metadata.version(distribution)}")

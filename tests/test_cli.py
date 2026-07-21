@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from dataclasses import asdict
 
 import pytest
 
@@ -88,4 +89,40 @@ def test_synthesis_dry_run_merges_config_and_does_not_construct_backend(
     assert "selected=1" in output
     assert "processed=0" in output
     assert "skipped=1" in output
+
+
+def test_synthesis_main_forwards_overwrite_through_validated_overrides(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from triviaqa_tts.cli import synthesize_questions
+    from triviaqa_tts.config import AppConfig, apply_cli_overrides
+    from triviaqa_tts.tts.synthesize import SynthesisSummary
+
+    captured: dict[str, object] = {}
+    monkeypatch.setattr(synthesize_questions, "load_config", lambda path: AppConfig())
+
+    def capture_overrides(config: AppConfig, **values: object) -> AppConfig:
+        captured["overrides"] = values
+        return apply_cli_overrides(config, **values)
+
+    def capture_synthesis(config: AppConfig, factory: object) -> SynthesisSummary:
+        captured["selection"] = asdict(config.selection)
+        return SynthesisSummary(0, 0, 0, 0, 0, 0)
+
+    monkeypatch.setattr(synthesize_questions, "apply_cli_overrides", capture_overrides)
+    monkeypatch.setattr(synthesize_questions, "synthesize_manifest", capture_synthesis)
+
+    assert synthesize_questions.main(["--config", "settings.yaml", "--overwrite"]) == 0
+    assert captured["overrides"] == {
+        "limit": None,
+        "start_index": None,
+        "end_index": None,
+        "shard_index": None,
+        "num_shards": None,
+        "resume": None,
+        "overwrite": True,
+        "dry_run": None,
+    }
+    assert captured["selection"]["overwrite"] is True
+    assert captured["selection"]["resume"] is False
 

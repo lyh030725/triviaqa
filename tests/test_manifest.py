@@ -90,12 +90,36 @@ def test_safe_audio_stem_uses_sanitized_prefix_and_question_id_hash():
     assert stem == f"trivia_question_42_{hashlib.sha256(question_id.encode()).hexdigest()[:12]}"
 
 
-def test_iter_jsonl_warns_and_ignores_only_invalid_unterminated_final_line(tmp_path):
+@pytest.mark.parametrize(
+    "truncated_record",
+    [
+        b'{"question_id":',
+        b'{"question_id":"unterminated',
+    ],
+)
+def test_iter_jsonl_warns_and_ignores_truncated_unterminated_final_line(
+    tmp_path, truncated_record
+):
     path = tmp_path / "manifest.jsonl"
-    path.write_bytes(b'{"question_id":"one"}\n{"question_id":')
+    path.write_bytes(b'{"question_id":"one"}\n' + truncated_record)
 
     with pytest.warns(UserWarning, match="incomplete final JSONL record"):
         assert list(iter_jsonl(path)) == [{"question_id": "one"}]
+
+
+@pytest.mark.parametrize(
+    "garbage_record",
+    [
+        b"not json",
+        b'{"question_id":not json',
+    ],
+)
+def test_iter_jsonl_rejects_complete_garbage_in_unterminated_final_line(tmp_path, garbage_record):
+    path = tmp_path / "manifest.jsonl"
+    path.write_bytes(b'{"question_id":"one"}\n' + garbage_record)
+
+    with pytest.raises(ManifestFormatError):
+        list(iter_jsonl(path))
 
 
 @pytest.mark.parametrize(

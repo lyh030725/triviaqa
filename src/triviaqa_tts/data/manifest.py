@@ -68,8 +68,15 @@ def iter_jsonl(path: Path, allow_partial_last_line: bool = True) -> Iterator[dic
         has_newline = raw_line.endswith(b"\n")
         try:
             value = json.loads(raw_line.decode("utf-8"))
-        except (UnicodeDecodeError, json.JSONDecodeError) as error:
-            if allow_partial_last_line and is_final and not has_newline:
+        except UnicodeDecodeError as error:
+            raise ManifestFormatError(f"invalid JSONL record at line {index} in {path}") from error
+        except json.JSONDecodeError as error:
+            if (
+                allow_partial_last_line
+                and is_final
+                and not has_newline
+                and _is_truncated_json_object(error)
+            ):
                 warnings.warn(
                     f"ignoring incomplete final JSONL record in {path}", UserWarning, stacklevel=2
                 )
@@ -78,6 +85,14 @@ def iter_jsonl(path: Path, allow_partial_last_line: bool = True) -> Iterator[dic
         if not isinstance(value, dict):
             raise ManifestFormatError(f"JSONL record at line {index} in {path} must be an object")
         yield value
+
+
+def _is_truncated_json_object(error: json.JSONDecodeError) -> bool:
+    """Return whether the decoder error can only result from an unfinished object."""
+    document = error.doc
+    if not document.lstrip().startswith("{"):
+        return False
+    return error.msg == "Unterminated string starting at" or error.pos == len(document)
 
 
 def normalize_question(text: str) -> str:

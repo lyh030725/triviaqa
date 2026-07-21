@@ -64,3 +64,23 @@ def test_limit_is_applied_after_range_and_global_ordinal_sharding():
     )
 
     assert [record["original_index"] for record in selected] == [4, 7]
+
+
+@pytest.mark.parametrize(
+    ("start_index", "end_index", "shard_index", "num_shards", "limit"),
+    [
+        (-1, None, 0, 1, None),
+        (2, 1, 0, 1, None),
+        (0, None, -1, 1, None),
+        (0, None, 1, 1, None),
+        (0, None, 0, 0, None),
+        (0, None, 0, -1, None),
+        (0, None, 0, 1, 0),
+        (0, None, 0, 1, -1),
+    ],
+)
+def test_selection_rejects_invalid_arguments(
+    start_index, end_index, shard_index, num_shards, limit
+):
+    with pytest.raises(ValueError):
+        select_records([], start_index, end_index, shard_index, num_shards, limit)

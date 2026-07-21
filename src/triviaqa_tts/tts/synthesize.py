@@ -8,7 +8,7 @@ import os
 from collections.abc import Iterable, Mapping
 from pathlib import Path
 
-from triviaqa_tts.audio.validation import AudioValidationError, validate_wav
+from triviaqa_tts.audio.validation import validate_wav
 from triviaqa_tts.config import AppConfig, AudioConfig
 from triviaqa_tts.data.manifest import (
     ManifestFormatError,
@@ -78,8 +78,30 @@ def is_complete(
     audio_config: AppConfig | AudioConfig,
 ) -> bool:
     """Return whether a WAV and its latest metadata satisfy every resume invariant."""
+    try:
+        return _is_complete(record, metadata, wav_path, expected, audio_config)
+    except Exception:
+        return False
+
+
+def _is_complete(
+    record: Mapping[str, object],
+    metadata: Mapping[str, object] | None,
+    wav_path: Path,
+    expected: Mapping[str, object],
+    audio_config: AppConfig | AudioConfig,
+) -> bool:
+    """Compare resume metadata and its WAV, failing closed for malformed values."""
     path = Path(wav_path)
-    if metadata is None or metadata.get("status") not in _COMPLETE_STATUSES:
+    if (
+        not isinstance(record, Mapping)
+        or not isinstance(metadata, Mapping)
+        or not isinstance(expected, Mapping)
+    ):
+        return False
+
+    status = metadata.get("status")
+    if not isinstance(status, str) or status not in _COMPLETE_STATUSES:
         return False
 
     question_id = record.get("question_id")
@@ -87,18 +109,28 @@ def is_complete(
     if (
         not isinstance(question_id, str)
         or not isinstance(question, str)
-        or metadata.get("question_id") != question_id
+        or "question_id" not in metadata
+        or not _json_values_equal(metadata["question_id"], question_id)
     ):
         return False
 
     question_sha256 = hashlib.sha256(normalize_question(question).encode("utf-8")).hexdigest()
-    if metadata.get("question_sha256") != question_sha256:
+    if (
+        "question_sha256" not in metadata
+        or not _json_values_equal(metadata["question_sha256"], question_sha256)
+    ):
         return False
-    if "question_sha256" in expected and expected["question_sha256"] != question_sha256:
+    if "question_sha256" in expected and not _json_values_equal(
+        expected["question_sha256"], question_sha256
+    ):
         return False
 
     for field in _EXPECTED_TTS_FIELDS:
-        if field not in expected or metadata.get(field) != expected[field]:
+        if (
+            field not in expected
+            or field not in metadata
+            or not _json_values_equal(metadata[field], expected[field])
+        ):
             return False
 
     audio = audio_config.audio if isinstance(audio_config, AppConfig) else audio_config
@@ -107,18 +139,42 @@ def is_complete(
         "channels": audio.channels,
         "subtype": audio.subtype,
     }
-    if any(metadata.get(field) != value for field, value in stored_format.items()):
+    if any(
+        field not in metadata or not _json_values_equal(metadata[field], value)
+        for field, value in stored_format.items()
+    ):
         return False
 
-    try:
-        if not path.is_file():
-            return False
-        if metadata.get("audio_sha256") != sha256_file(path):
-            return False
-        validate_wav(path, audio_config)
-    except (AudioValidationError, OSError):
+    if not path.is_file() or "audio_sha256" not in metadata:
         return False
+    if not _json_values_equal(metadata["audio_sha256"], sha256_file(path)):
+        return False
+    validate_wav(path, audio_config)
     return True
+
+
+def _json_values_equal(actual: object, expected: object) -> bool:
+    """Compare JSON values without Python's cross-type equality coercions."""
+    if type(actual) is not type(expected):
+        return False
+    if actual is None:
+        return True
+    if isinstance(actual, (bool, int, float, str)):
+        return actual == expected
+    if isinstance(actual, list):
+        return len(actual) == len(expected) and all(
+            _json_values_equal(item, expected_item)
+            for item, expected_item in zip(actual, expected, strict=True)
+        )
+    if isinstance(actual, dict):
+        if not all(isinstance(key, str) for key in actual):
+            return False
+        if not all(isinstance(key, str) for key in expected):
+            return False
+        return actual.keys() == expected.keys() and all(
+            _json_values_equal(actual[key], expected[key]) for key in actual
+        )
+    return False
 
 
 def append_jsonl_fsync(path: Path, record: Mapping[str, object]) -> None:

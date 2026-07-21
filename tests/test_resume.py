@@ -110,9 +110,58 @@ def test_complete_rejects_wrong_question_identity(resume_case):
     assert not is_complete(record, metadata, wav_path, expected, audio_config)
 
 
-def test_complete_rejects_missing_required_field(resume_case):
+@pytest.mark.parametrize(
+    "field",
+    [
+        "model_id",
+        "model_revision",
+        "speaker",
+        "language",
+        "seed",
+        "generation",
+        "sample_rate",
+        "channels",
+        "subtype",
+    ],
+)
+def test_complete_rejects_missing_required_identity_or_format_field(resume_case, field):
     record, metadata, wav_path, expected, audio_config = resume_case
-    del metadata["generation"]
+    del metadata[field]
+
+    assert not is_complete(record, metadata, wav_path, expected, audio_config)
+
+
+@pytest.mark.parametrize("status", [[], {"state": "success"}, 1, True, None])
+def test_complete_fails_closed_for_malformed_status(resume_case, status):
+    record, metadata, wav_path, expected, audio_config = resume_case
+    metadata["status"] = status
+
+    assert not is_complete(record, metadata, wav_path, expected, audio_config)
+
+
+def test_complete_requires_present_nullable_model_revision(resume_case):
+    record, metadata, wav_path, expected, audio_config = resume_case
+    expected["model_revision"] = None
+    metadata["model_revision"] = None
+    del metadata["model_revision"]
+
+    assert not is_complete(record, metadata, wav_path, expected, audio_config)
+
+
+@pytest.mark.parametrize(
+    ("field", "replacement"),
+    [
+        ("seed", 42.0),
+        ("channels", True),
+        ("generation", {"nested": [1, {"enabled": 1}]}),
+    ],
+)
+def test_complete_requires_exact_json_value_types(resume_case, field, replacement):
+    record, metadata, wav_path, expected, audio_config = resume_case
+    expected["generation"] = {"nested": [1, {"enabled": True}]}
+    if field != "generation":
+        metadata["generation"] = expected["generation"]
+    metadata[field] = replacement
 
     assert not is_complete(record, metadata, wav_path, expected, audio_config)
 

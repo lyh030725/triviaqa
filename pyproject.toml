@@ -1,0 +1,38 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "triviaqa-tts"
+version = "0.1.0"
+description = "Reproducible TriviaQA question-to-speech dataset pipeline"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "datasets",
+    "huggingface-hub",
+    "numpy",
+    "PyYAML",
+    "soundfile",
+    "soxr",
+]
+
+[project.optional-dependencies]
+tts = ["qwen-tts==0.1.1"]
+
+[dependency-groups]
+dev = [
+    "pytest",
+    "ruff",
+]
+
+[tool.pytest.ini_options]
+markers = [
+    "gpu: requires a CUDA-capable GPU and Qwen3-TTS model weights",
+]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/triviaqa_tts"]

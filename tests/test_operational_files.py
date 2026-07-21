@@ -108,6 +108,7 @@ def test_shell_scripts_are_executable_fail_fast_wrappers() -> None:
 def test_tts_extra_pins_the_approved_pytorch_cuda_stack() -> None:
     metadata = tomllib.loads((REPOSITORY_ROOT / "pyproject.toml").read_text(encoding="utf-8"))
 
+    assert "hf-transfer" in metadata["project"]["dependencies"]
     assert metadata["project"]["optional-dependencies"]["tts"] == [
         "qwen-tts==0.1.1",
         "numba==0.66.0",

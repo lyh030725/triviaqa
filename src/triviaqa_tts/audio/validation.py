@@ -64,6 +64,9 @@ def prepare_waveform(
     if np.isinf(source).any():
         raise AudioValidationError("waveform contains Inf samples")
 
+    if np.any(source < -1.0) or np.any(source > 1.0):
+        raise AudioValidationError("waveform samples are outside the valid [-1, 1] range")
+
     with np.errstate(over="ignore", invalid="ignore"):
         samples = source.astype(np.float32, copy=False)
     if np.isnan(samples).any():
@@ -153,9 +156,7 @@ def validate_wav(path: Path, config: AudioSettings) -> AudioMetrics:
     if info.format != "WAV":
         raise AudioValidationError(f"audio format must be WAV, got {info.format}")
     if info.subtype != audio.subtype:
-        raise AudioValidationError(
-            f"audio subtype must be {audio.subtype}, got {info.subtype}"
-        )
+        raise AudioValidationError(f"audio subtype must be {audio.subtype}, got {info.subtype}")
     if info.channels != audio.channels or decoded.shape[1] != audio.channels:
         raise AudioValidationError(
             f"audio channel count must be {audio.channels}, got {info.channels}"
@@ -195,6 +196,8 @@ def validate_wav(path: Path, config: AudioSettings) -> AudioMetrics:
         warnings.append("duration_below_minimum")
     if duration_seconds > validation.maximum_duration_seconds:
         warnings.append("duration_above_maximum")
+    if zero_ratio > validation.maximum_zero_ratio:
+        warnings.append("zero_ratio_exceeds_maximum")
     if clipped_sample_count:
         warnings.append("clipping_detected")
     if leading_silence_seconds > validation.maximum_leading_silence_seconds:

@@ -147,9 +147,7 @@ def test_invalid_input_is_rejected_before_writing(
     assert list(tmp_path.iterdir()) == []
 
 
-def test_clipping_is_a_warning_and_preserves_file(
-    tmp_path: Path, audio_config: AppConfig
-) -> None:
+def test_clipping_is_a_warning_and_preserves_file(tmp_path: Path, audio_config: AppConfig) -> None:
     output = tmp_path / "clipped.wav"
     waveform = tone(24_000)
     waveform[:2] = np.array([1.0, -1.0], dtype=np.float32)
@@ -229,9 +227,7 @@ def test_zero_ratio_uses_decoded_samples(tmp_path: Path, audio_config: AppConfig
             "subtype",
         ),
         (
-            lambda path: sf.write(
-                path, np.array([], dtype=np.float32), 24_000, subtype="PCM_16"
-            ),
+            lambda path: sf.write(path, np.array([], dtype=np.float32), 24_000, subtype="PCM_16"),
             "empty",
         ),
     ],
@@ -315,3 +311,66 @@ def test_all_silent_audio_has_full_silence_durations(
     assert metrics.leading_silence_seconds == pytest.approx(0.2)
     assert metrics.trailing_silence_seconds == pytest.approx(0.2)
     assert metrics.zero_ratio == 1.0
+
+
+@pytest.mark.parametrize("sample", [1.01, -1.01])
+@pytest.mark.parametrize("existing_destination", [False, True])
+def test_out_of_range_input_is_rejected_before_writing_or_resampling(
+    tmp_path: Path,
+    audio_config: AppConfig,
+    sample: float,
+    existing_destination: bool,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    output = tmp_path / "out-of-range.wav"
+    if existing_destination:
+        output.write_bytes(b"original")
+
+    def unexpected_resample(*args: object, **kwargs: object) -> None:
+        raise AssertionError("soxr must not be called for out-of-range input")
+
+    monkeypatch.setattr("triviaqa_tts.audio.validation.soxr.resample", unexpected_resample)
+
+    with pytest.raises(AudioValidationError, match=r"outside the valid \[-1, 1\] range"):
+        write_validated_wav(np.full(8_000, sample, dtype=np.float32), 16_000, output, audio_config)
+
+    if existing_destination:
+        assert output.read_bytes() == b"original"
+        assert list(tmp_path.iterdir()) == [output]
+    else:
+        assert not output.exists()
+        assert list(tmp_path.iterdir()) == []
+
+
+def test_excessive_zero_ratio_is_a_configurable_warning(
+    tmp_path: Path, audio_config: AppConfig
+) -> None:
+    output = tmp_path / "mostly-zeros.wav"
+    config = replace(
+        audio_config,
+        audio_validation=replace(audio_config.audio_validation, maximum_zero_ratio=0.5),
+    )
+    waveform = np.resize(np.array([0.0, 0.0, 0.0, 0.5], dtype=np.float32), 12_000)
+
+    metrics = write_validated_wav(waveform, 24_000, output, config)
+
+    assert output.exists()
+    assert metrics.zero_ratio == pytest.approx(0.75)
+    assert "zero_ratio_exceeds_maximum" in metrics.warning_reasons
+    assert metrics.status == "warning"
+
+
+def test_zero_ratio_below_configured_maximum_is_not_a_warning(
+    tmp_path: Path, audio_config: AppConfig
+) -> None:
+    config = replace(
+        audio_config,
+        audio_validation=replace(audio_config.audio_validation, maximum_zero_ratio=0.8),
+    )
+    waveform = np.resize(np.array([0.0, 0.0, 0.0, 0.5], dtype=np.float32), 12_000)
+
+    metrics = write_validated_wav(waveform, 24_000, tmp_path / "allowed-zeros.wav", config)
+
+    assert metrics.zero_ratio == pytest.approx(0.75)
+    assert "zero_ratio_exceeds_maximum" not in metrics.warning_reasons
+    assert metrics.status == "success"

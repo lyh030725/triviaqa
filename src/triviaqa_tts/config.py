@@ -62,6 +62,7 @@ class AudioValidationConfig:
     maximum_duration_seconds: float = 60.0
     clipping_threshold: float = 0.999
     silence_threshold: float = 0.01
+    maximum_zero_ratio: float = 0.99
     maximum_leading_silence_seconds: float = 2.0
     maximum_trailing_silence_seconds: float = 3.0
 
@@ -231,6 +232,8 @@ def _validate_config(config: AppConfig) -> None:
         )
     if not 0 <= validation.clipping_threshold <= 1:
         raise ValueError("audio_validation.clipping_threshold must be between 0 and 1")
+    if not 0 <= validation.maximum_zero_ratio <= 1:
+        raise ValueError("audio_validation.maximum_zero_ratio must be between 0 and 1")
     if validation.silence_threshold < 0:
         raise ValueError("audio_validation.silence_threshold must be non-negative")
     if validation.maximum_leading_silence_seconds < 0:

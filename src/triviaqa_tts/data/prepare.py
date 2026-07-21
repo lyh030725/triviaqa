@@ -17,6 +17,9 @@ from triviaqa_tts.config import AppConfig
 from triviaqa_tts.data.manifest import example_to_record, write_canonical_jsonl
 
 _SELECTION_ALGORITHM_VERSION = "python-random-sample-v1"
+_EXPECTED_VALIDATION_COUNT = 11_313
+_EXPECTED_PILOT_SIZE = 100
+_EXPECTED_PILOT_SEED = 20_260_721
 
 
 @dataclass(frozen=True)
@@ -102,6 +105,13 @@ def sample_pilot_indices(count: int, size: int, seed: int) -> list[int]:
     return sorted(random.Random(seed).sample(range(count), size))
 
 
+def _validate_pilot_selection(config: AppConfig) -> None:
+    if config.selection.pilot_size != _EXPECTED_PILOT_SIZE:
+        raise ValueError(f"selection.pilot_size must be {_EXPECTED_PILOT_SIZE}")
+    if config.selection.pilot_seed != _EXPECTED_PILOT_SEED:
+        raise ValueError(f"selection.pilot_seed must be {_EXPECTED_PILOT_SEED}")
+
+
 def prepare_dataset(
     config: AppConfig,
     *,
@@ -109,6 +119,7 @@ def prepare_dataset(
     hub_api: object | None = None,
 ) -> PreparationResult:
     """Load, validate, and atomically write full and pilot TriviaQA manifests."""
+    _validate_pilot_selection(config)
     if dataset_loader is None:
         from datasets import load_dataset
 
@@ -129,7 +140,7 @@ def prepare_dataset(
 
     validate_triviaqa_schema(dataset)
     rows = _validated_rows(dataset)
-    _validate_advertised_count(dataset, config.dataset.split, len(rows))
+    _validate_validation_count(dataset, config.dataset.split, len(rows))
     pilot_indices = sample_pilot_indices(
         len(rows), config.selection.pilot_size, config.selection.pilot_seed
     )
@@ -239,16 +250,23 @@ def _is_string_sequence(value: object) -> bool:
     )
 
 
-def _validate_advertised_count(dataset: object, split: str, actual_count: int) -> None:
+def _validate_validation_count(dataset: object, split: str, actual_count: int) -> None:
+    if actual_count != _EXPECTED_VALIDATION_COUNT:
+        raise ValueError(
+            f"dataset split {split} contains {actual_count} rows; expected exactly "
+            f"{_EXPECTED_VALIDATION_COUNT}"
+        )
     info = getattr(dataset, "info", None)
     splits = getattr(info, "splits", None)
-    if not isinstance(splits, Mapping) or split not in splits:
-        return
-    expected_count = getattr(splits[split], "num_examples", None)
-    if expected_count is not None and expected_count != actual_count:
+    if not isinstance(splits, Mapping):
+        raise ValueError(f"dataset split {split} is missing info.splits metadata")
+    if split not in splits:
+        raise ValueError(f"dataset split {split} is missing from info.splits metadata")
+    advertised_count = getattr(splits[split], "num_examples", None)
+    if advertised_count != _EXPECTED_VALIDATION_COUNT:
         raise ValueError(
-            f"dataset split {split} contains {actual_count} rows but metadata advertises "
-            f"{expected_count}"
+            f"dataset split {split} metadata advertises {advertised_count}; expected exactly "
+            f"{_EXPECTED_VALIDATION_COUNT}"
         )
 
 

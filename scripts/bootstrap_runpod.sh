@@ -59,21 +59,20 @@ uv sync --locked --extra tts
 
 mkdir -p \
   "${CACHE_ROOT}/hub" \
-  "${CACHE_ROOT}/datasets" \
-  "${CACHE_ROOT}/transformers"
+  "${CACHE_ROOT}/datasets"
 printf '%s\n' \
   "export HF_HOME=${CACHE_ROOT}" \
   "export HF_HUB_CACHE=${CACHE_ROOT}/hub" \
   "export HUGGINGFACE_HUB_CACHE=${CACHE_ROOT}/hub" \
   "export HF_DATASETS_CACHE=${CACHE_ROOT}/datasets" \
-  "export TRANSFORMERS_CACHE=${CACHE_ROOT}/transformers" \
+  "unset TRANSFORMERS_CACHE" \
   > "${REPO_ROOT}/.env.runpod"
 
 export HF_HOME="${CACHE_ROOT}"
 export HF_HUB_CACHE="${CACHE_ROOT}/hub"
 export HUGGINGFACE_HUB_CACHE="${CACHE_ROOT}/hub"
 export HF_DATASETS_CACHE="${CACHE_ROOT}/datasets"
-export TRANSFORMERS_CACHE="${CACHE_ROOT}/transformers"
+unset TRANSFORMERS_CACHE
 
 "${PYTHON}" - <<'PY'
 from __future__ import annotations

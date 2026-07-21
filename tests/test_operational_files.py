@@ -102,6 +102,8 @@ def test_shell_scripts_are_executable_fail_fast_wrappers() -> None:
         text = (SCRIPT_DIRECTORY / name).read_text(encoding="utf-8")
         assert 'REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd -P)"' in text
         assert 'cd -- "${REPO_ROOT}"' in text
+        assert 'source "${REPO_ROOT}/.env.runpod"' in text
+        assert "unset TRANSFORMERS_CACHE" in text
         assert f'"${{REPO_ROOT}}/.venv/bin/python" -m {module}' in text
 
 
@@ -170,7 +172,7 @@ def test_bootstrap_covers_runpod_prerequisites_and_sdpa_fallback() -> None:
         "HF_HOME",
         "HF_HUB_CACHE",
         "HF_DATASETS_CACHE",
-        "TRANSFORMERS_CACHE",
+        "unset TRANSFORMERS_CACHE",
         "torch.cuda.is_available()",
         "torch.cuda.is_bf16_supported()",
         "torch.cuda.get_device_name(0)",
@@ -188,6 +190,7 @@ def test_bootstrap_covers_runpod_prerequisites_and_sdpa_fallback() -> None:
         "SDPA",
     ):
         assert required in text
+    assert "export TRANSFORMERS_CACHE=" not in text
 
 
 def test_makefile_exposes_only_explicit_validation_execution() -> None:

@@ -118,6 +118,13 @@ def valid_rows(count=3):
     ]
 
 
+def assert_no_preparation_artifacts(config: AppConfig) -> None:
+    assert not config.selection.manifest_path.exists()
+    assert not config.selection.manifest_path.with_suffix(".meta.json").exists()
+    assert not (config.paths.data_dir / f"pilot_{config.selection.pilot_size}.jsonl").exists()
+    assert not (config.paths.data_dir / "pilot_question_ids.txt").exists()
+
+
 def test_prepare_pins_resolved_sha_and_writes_complete_atomic_outputs(tmp_path):
     config = make_config(tmp_path)
     dataset = FakeDataset(valid_rows(11_313))
@@ -179,10 +186,7 @@ def test_missing_nested_schema_fails_before_writing_files(tmp_path):
     with pytest.raises(ValueError, match=r"answer\.normalized_aliases"):
         prepare_dataset(config, dataset_loader=lambda *args, **kwargs: dataset, hub_api=FakeHubApi())
 
-    assert not config.selection.manifest_path.exists()
-    assert not (tmp_path / "validation_manifest.meta.json").exists()
-    assert not (tmp_path / "pilot_2.jsonl").exists()
-    assert not (tmp_path / "pilot_question_ids.txt").exists()
+    assert_no_preparation_artifacts(config)
 
 
 def test_runtime_schema_mismatch_fails_before_writing_files(tmp_path):
@@ -194,7 +198,7 @@ def test_runtime_schema_mismatch_fails_before_writing_files(tmp_path):
     with pytest.raises(ValueError, match=r"row 1.*answer\.aliases"):
         prepare_dataset(config, dataset_loader=lambda *args, **kwargs: dataset, hub_api=FakeHubApi())
 
-    assert not config.selection.manifest_path.exists()
+    assert_no_preparation_artifacts(config)
 
 
 @pytest.mark.parametrize(
@@ -219,10 +223,7 @@ def test_prepare_rejects_invalid_validation_count_before_writing_files(
     with pytest.raises(ValueError, match="validation"):
         prepare_dataset(config, dataset_loader=lambda *args, **kwargs: dataset, hub_api=FakeHubApi())
 
-    assert not config.selection.manifest_path.exists()
-    assert not config.selection.manifest_path.with_suffix(".meta.json").exists()
-    assert not (config.paths.data_dir / "pilot_100.jsonl").exists()
-    assert not (config.paths.data_dir / "pilot_question_ids.txt").exists()
+    assert_no_preparation_artifacts(config)
 
 
 @pytest.mark.parametrize(
@@ -241,7 +242,7 @@ def test_prepare_requires_fixed_pilot_selection_before_writing_files(
             hub_api=FakeHubApi(),
         )
 
-    assert not config.selection.manifest_path.exists()
+    assert_no_preparation_artifacts(config)
 
 
 def test_validate_schema_rejects_wrong_declared_scalar_type():

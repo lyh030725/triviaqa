@@ -110,6 +110,7 @@ def test_tts_extra_pins_the_approved_pytorch_cuda_stack() -> None:
 
     assert metadata["project"]["optional-dependencies"]["tts"] == [
         "qwen-tts==0.1.1",
+        "numba==0.66.0",
         "torch==2.11.0",
         "torchaudio==2.11.0",
     ]
@@ -136,6 +137,8 @@ def test_lockfile_resolves_only_the_approved_cuda_12_8_stack() -> None:
     assert packages["torch"]["source"] == expected_source
     assert packages["torchaudio"]["version"] == "2.11.0+cu128"
     assert packages["torchaudio"]["source"] == expected_source
+    assert packages["numba"]["version"] == "0.66.0"
+    assert packages["llvmlite"]["version"] == "0.48.0"
     assert packages["cuda-toolkit"]["version"].startswith("12.8.")
 
     package_names = set(packages)
@@ -155,10 +158,12 @@ def test_bootstrap_covers_runpod_prerequisites_and_sdpa_fallback() -> None:
     for required in (
         "ffmpeg",
         "libsndfile1",
+        "  sox \\",
         "build-essential",
         "git",
         "curl",
         "uv python install 3.12",
+        "uv venv --python 3.12 --allow-existing",
         "uv sync --locked --extra tts",
         "/workspace/huggingface_cache",
         "HF_HOME",

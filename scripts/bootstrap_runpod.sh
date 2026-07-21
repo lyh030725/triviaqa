@@ -41,6 +41,7 @@ DEBIAN_FRONTEND=noninteractive "${APT[@]}" install -y --no-install-recommends \
   git \
   libsndfile1 \
   ninja-build \
+  sox \
   pkg-config
 
 if ! command -v uv >/dev/null 2>&1; then
@@ -53,7 +54,7 @@ if ! command -v uv >/dev/null 2>&1; then
 fi
 
 uv python install 3.12
-uv venv --python 3.12 "${REPO_ROOT}/.venv"
+uv venv --python 3.12 --allow-existing "${REPO_ROOT}/.venv"
 uv sync --locked --extra tts
 
 mkdir -p \

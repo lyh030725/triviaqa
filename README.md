@@ -2,7 +2,8 @@
 
 TriviaQA validation 질문을 `Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice`의 영어 화자
 `Aiden`으로 합성하는 재현 가능한 RunPod 파이프라인이다. 질문과 정답 alias는 보존하지만 evidence
-문서는 읽거나 복사하지 않는다. 음성 QA, ASR, Moshi/EPAD, 정답 정확도 평가는 범위 밖이다.
+문서는 읽거나 복사하지 않는다. 합성 WAV는 공개 Moshi bf16 checkpoint의 closed-book 음성 QA
+baseline에도 사용한다.
 
 ## 고정 입력과 환경
 
@@ -13,6 +14,14 @@ TriviaQA validation 질문을 `Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice`의 영어 �
 - 확인한 model revision: `0c0e3051f131929182e2c023b9537f8b1c68adfe`
 - 출력: 24,000Hz, mono, PCM 16-bit WAV; seed 42
 - Python 3.12, `qwen-tts==0.1.1`, PyTorch/TorchAudio 2.11.0 cu128
+- 4분 이상으로 선별된 표본은 1,639. 중복 오디오를 제외하면 1,635개
+- 데이터 오디오를 context_path로 전달: audiomarathon-moshi-ringkv/src/audiomarathon_ringkv/evaluate.py:233
+- 실제 입력 순서: 5초 무음 → context 오디오 → 0.25초 무음 → 질문/선택지 TTS: audiomarathon-moshi-ringkv/src/
+    audiomarathon_ringkv/evaluate.py:84
+
+- 다만 RingKV가 기본 240초만 보존하므로, 전체 입력이 길면 context의 앞부분부터 제거
+- lm_kwargs_overrides={"context": 3000}의 context는 별도 텍스트가 아니라 캐시 길이 설정
+  ,audiomarathon-moshi-ringkv/src/audiomarathon_ringkv/evaluate.py:52
 
 `unfiltered.nocontext`는 질문 TTS에 불필요한 Wikipedia/Web evidence를 내려받고 처리하는 범위를
 최소화한다. 실행 때 Hub의 revision을 immutable SHA로 resolve하여 manifest와 생성 metadata에
@@ -104,6 +113,68 @@ tar -C /workspace/triviaqa-tts -czf /workspace/triviaqa-tts-results.tgz data aud
 # 또는 설정된 원격 저장소로
 rclone copy /workspace/triviaqa-tts/ remote:triviaqa-tts/ --include '/data/**' --include '/audio/**' --include '/logs/**' --include '/configs/**'
 ```
+
+## Moshi 평가
+
+이 평가는 논문 Table 8의 완전 재현이 아니다. 저자들이 TriviaQA configuration/split, TTS 엔진,
+incipit 목록, 생성 종료 조건, 채점 코드를 공개하지 않았기 때문이다. 공개 자원만 고정한 baseline이며,
+후속 full-cache/compression 비교도 같은 protocol을 사용해야 한다.
+
+현재 protocol:
+
+- 입력: `unfiltered.nocontext` validation에서 합성에 성공해
+  `logs/pilot/metadata.jsonl`에 기록된 순서의 500개 mono 24kHz WAV
+- TTS: `Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice`, Aiden, seed 42
+- 모델: `kyutai/moshiko-pytorch-bf16`, bf16; 실행 결과에 실제 Hugging Face revision 기록
+- 생성: reset 후 silent user frame 5초를 넣어 공개 대화형 checkpoint의 시작 인사를 기다린 뒤
+  질문 WAV를 Mimi/Moshi user stream에 넣고 질문 종료 직후 text stream에 model의
+  `end_of_text_padding_id`인 EPAD 1개 강제. 이후 silent user frames로 응답 생성
+- sampling: Moshi 공개 `LMGen` 기본값, 질문마다 seed 4242와 streaming state reset
+- 종료: 최대 20초. text token이 나온 뒤 2초 동안 새 token이 없으면 조기 종료
+- 예측: Moshi Inner Monologue의 PAD/EPAD/EOS 제외 text
+- 채점: TriviaQA 공식 normalization 후 모든 alias 대상 exact match와 token-bounded
+  alias containment. 실패도 500개 분모에 포함
+
+5초 pre-roll은 공개 모델용 우회책이며 논문의 미공개 random incipit 또는 base checkpoint를
+재현하지 않는다. 20초를 넘는 응답이 보이면
+`--max-response-seconds`를 늘려 전 항목을 같은 값으로 다시 평가한다.
+
+Moshi는 기존 CUDA/Torch 설치를 재사용한다. 검증한 Moshi source commit은
+`e6a55d2722a65870ef52a6c9f6ecfc0e90f38362` (`moshi==0.2.13`)다. upstream package가 아직
+Torch 2.11을 dependency 범위에 포함하지 않아 dependency 해결만 건너뛴다. 현재 RTX 4090 smoke
+평가에서 동작을 확인했다.
+
+```bash
+uv pip install --python .venv/bin/python --no-deps \
+  'git+https://github.com/kyutai-labs/moshi.git@e6a55d2722a65870ef52a6c9f6ecfc0e90f38362#subdirectory=moshi'
+uv pip install --python .venv/bin/python 'sentencepiece>=0.2,<0.3'
+./scripts/evaluate_moshi.sh
+```
+
+중단 후 같은 명령을 실행하면 `question_id` 기준으로 완료 항목을 건너뛴다. 산출물:
+
+```text
+logs/moshi_eval_preroll_5s_max20s/results.jsonl  # 항목별 prediction, score, model/audio revision, 실행 시간
+logs/moshi_eval_preroll_5s_max20s/summary.json  # EM, alias-containment accuracy, 성공/실패 수
+logs/moshi_eval_preroll_5s_max20s/answers.json  # 질문, 정답, alias, Moshi 원문 답변
+logs/moshi_eval_preroll_5s_max20s/correct_answers.json  # alias containment 정답만
+```
+
+2026-07-22 현재 5초 pre-roll·20초 상한 500개 결과:
+
+- checkpoint revision: `2bfc9ae6e89079a5cc7ed2a68436010d91a3d289`
+- 성공/실패: 500/0
+- exact match: 1/500, 0.2%
+- alias containment: 83/500, 16.6%
+- 종료: text idle 499개, 20초 상한 1개
+- 기존 5초 pre-roll·8초 상한과 정확도 동일
+- 8초 대비 답변 text 변경 44개, 정답/오답 전환 0개
+- 0초 pre-roll baseline 대비 containment: 59개에서 83개, +24개(+4.8%p)
+
+근거: [Moshi 논문](https://arxiv.org/abs/2410.00037),
+[공식 PyTorch 구현](https://github.com/kyutai-labs/moshi),
+[Spoken QA 공식 Issue #87](https://github.com/kyutai-labs/moshi/issues/87),
+[TriviaQA 공식 채점 코드](https://github.com/mandarjoshi90/triviaqa/blob/master/evaluation/triviaqa_evaluation.py).
 
 ## 검증
 

@@ -4,7 +4,8 @@
   suite를 실행한다.
 - 기본 검증은 network/GPU가 필요 없는 `uv run pytest -m "not gpu"`이다. 실제 모델 테스트는
   `RUN_QWEN_GPU_TEST=1`과 CUDA가 모두 있을 때만 실행한다.
-- TriviaQA evidence 처리, 음성 QA 추론, ASR, Moshi/EPAD, answer-accuracy 평가는 추가하지 않는다.
+- TriviaQA evidence 처리와 ASR은 추가하지 않는다. Moshi/EPAD와 answer-accuracy 평가는 README의
+  고정 protocol 범위만 유지한다.
 - setup, prepare, test, pilot에서 전체 validation 합성을 자동 시작하지 않는다. 사용자의 명시적
   validation 명령만 허용한다.
 - model ID/revision, speaker, language, seed, sample rate 또는 CUDA dependency를 변경하면

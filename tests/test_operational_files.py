@@ -83,6 +83,7 @@ def test_configs_separate_pilot_and_validation_inputs_and_outputs() -> None:
 
 def test_shell_scripts_are_executable_fail_fast_wrappers() -> None:
     expected_modules = {
+        "evaluate_moshi.sh": "triviaqa_tts.cli.evaluate_moshi",
         "prepare_dataset.sh": "triviaqa_tts.cli.prepare_dataset",
         "synthesize_pilot.sh": "triviaqa_tts.cli.synthesize_questions",
         "synthesize_validation.sh": "triviaqa_tts.cli.synthesize_questions",

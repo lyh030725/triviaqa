@@ -84,7 +84,14 @@ logs/
   pilot/
   validation/
   moshi_eval_preroll_5s_max20s/
+    results.jsonl
+    answers.json
+    correct_answers.json
+    summary.json
 ```
+
+최종 Moshi 평가의 raw results, 전체 답변, 정답 응답, summary는 재현 가능한 평가 기록으로
+Git에 함께 추적한다.
 
 ## 검증
 

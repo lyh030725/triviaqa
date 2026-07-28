@@ -1,0 +1,44 @@
+dataset:
+  name: mandarjoshi/trivia_qa
+  configuration: unfiltered.nocontext
+  split: validation
+  revision: null
+selection:
+  manifest_path: data/pilot_500.jsonl
+  pilot_size: 500
+  pilot_seed: 20260721
+  start_index: 0
+  end_index: null
+  shard_index: 0
+  num_shards: 1
+  limit: 500
+  resume: true
+  overwrite: false
+  dry_run: false
+tts:
+  backend: qwen3
+  model_id: Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice
+  model_revision: null
+  language: English
+  speaker: Aiden
+  seed: 42
+  dtype: bfloat16
+  attention: auto
+  generation: {}
+audio:
+  sample_rate: 24000
+  channels: 1
+  subtype: PCM_16
+audio_validation:
+  minimum_duration_seconds: 0.3
+  maximum_duration_seconds: 60.0
+  clipping_threshold: 0.999
+  silence_threshold: 0.01
+  maximum_zero_ratio: 0.99
+  maximum_leading_silence_seconds: 2.0
+  maximum_trailing_silence_seconds: 3.0
+paths:
+  data_dir: data
+  audio_dir: audio/qwen3_aiden_seed42/pilot
+  logs_dir: logs/pilot
+  cache_dir: /workspace/huggingface_cache

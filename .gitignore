@@ -7,11 +7,4 @@ __pycache__/
 .ruff_cache/
 /data/
 /audio/
-/logs/*
-!/logs/moshi_eval_preroll_5s_max20s/
-/logs/moshi_eval_preroll_5s_max20s/*
-!/logs/moshi_eval_preroll_5s_max20s/answers.json
-!/logs/moshi_eval_preroll_5s_max20s/correct_answers.json
-!/logs/moshi_eval_preroll_5s_max20s/results.jsonl
-!/logs/moshi_eval_preroll_5s_max20s/summary.json
 .env.runpod

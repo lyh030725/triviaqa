@@ -1,0 +1,9 @@
+{
+  "count": 128,
+  "exact": 32,
+  "improved": 45,
+  "unchanged": 71,
+  "worse": 12,
+  "old_errors": 211,
+  "new_errors": 162
+}
